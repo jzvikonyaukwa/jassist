@@ -6,51 +6,61 @@ import ollama from 'ollama';
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+    // Log activation message
+    console.log('Congratulations, your extension "jassist" is now active!');
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "jassist" is now active!');
+    // Register the command
+    const disposable = vscode.commands.registerCommand('jassist.jassist', async () => {
+        try {
+            // Create a webview panel
+            const panel = vscode.window.createWebviewPanel(
+                'deepChat', // Identifies the type of webview
+                'JASSIST Chat', // Title of the panel
+                vscode.ViewColumn.One, // Editor column to show the panel in
+                { enableScripts: true } // Enable JavaScript in the webview
+            );
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('jassist.jassist', () => {
-		const panel = vscode.window.createWebviewPanel(
-			'deepChat',
-			'JASSIST Chat',
-			vscode.ViewColumn.One,
-			{enableScripts:true}
-		)
+            // Set the HTML content for the webview
+            panel.webview.html = getWebviewContent();
 
-		panel.webview.html = getWebviewContent()
+            // Handle messages from the webview
+            panel.webview.onDidReceiveMessage(async (message: any) => {
+                if (message.command === 'chat') {
+                    const userPrompt = message.text;
 
-		panel.webview.onDidReceiveMessage(async(message:any)=>{
-			if(message.command ==='chat'){
-				const userPrompt = message.text;
-				let responseText ='';
-try{
-	const streamResponse = await ollama.chat({
-		model:'deepseek-r1:1.5b',
-		messages:[{role:'user',content: userPrompt}],
-		stream:true
-	})
+                    try {
+                        // Stream the response from the Ollama chat model
+                        const streamResponse = await ollama.chat({
+                            model: 'deepseek-r1:1.5b',
+                            messages: [{ role: 'user', content: userPrompt }],
+                            stream: true
+                        });
 
-	for await(const part of streamResponse){
-		responseText += part.message.content;
-		panel.webview.postMessage({command:'chatResponse',text:responseText});
-	}
+                        let responseText = '';
 
-} catch(err){
-	panel.webview.postMessage({command:'chatResponse', test:`Error: ${String(err)}`})
-}
+                        // Process each part of the streamed response
+                        for await (const part of streamResponse) {
+                            responseText += part.message.content;
+                            // Send the updated response back to the webview
+                            panel.webview.postMessage({ command: 'chatResponse', text: responseText });
+                        }
+                    } catch (err) {
+                        // Handle errors during the chat process
+                        console.error('Error during chat streaming:', err);
+                        panel.webview.postMessage({ command: 'chatResponse', text: `Error: ${String(err)}` });
+                    }
+                }
+            });
 
-			}
+        } catch (err) {
+            // Handle errors during webview panel creation or setup
+            console.error('Error creating webview panel:', err);
+            vscode.window.showErrorMessage('Failed to create JASSIST Chat panel. Please try again.');
+        }
+    });
 
-		})
-		
-	});
-
-	context.subscriptions.push(disposable);
+    // Add the command to the extension's subscriptions
+    context.subscriptions.push(disposable);
 }
 
 // This method is called when your extension is deactivated
